@@ -67,7 +67,7 @@
 
 (defn run
   [instructions in-chan out-chan]
-  (async/go-loop [tape instructions
+  (async/go-loop [tape (->> instructions (map-indexed vector) (into {}))
                   ptr 0
                   relative-base 0]
     (let [instruction (read-tape tape ptr)
