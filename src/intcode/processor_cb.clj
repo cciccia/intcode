@@ -1,4 +1,4 @@
-(ns intcode.processor
+(ns intcode.processor-cb
   (:require [clojure.core.async :as async]
             [clojure.math.combinatorics :as comb]))
 
@@ -66,7 +66,7 @@
                        (get-param-value tape relative-base %2 (+ ptr 1 %1))))))
 
 (defn run
-  [instructions in-chan out-chan]
+  [instructions in-cb out-chan]
   (async/go-loop [tape (->> instructions (map-indexed vector) (into {}))
                   ptr 0
                   relative-base 0]
@@ -85,12 +85,12 @@
                  (+ ptr 4)
                  relative-base])
             3 (let [[write-addr] (take-params* 1 true)
-                    value (async/<! in-chan)]
+                    value (in-cb)]
                 [(assoc-value* write-addr value)
                  (+ ptr 2)
                  relative-base])
             4 (let [[value] (take-params* 1 false)]
-                (async/put! out-chan value)
+                (async/>! out-chan value)
                 [tape
                  (+ ptr 2)
                  relative-base])
