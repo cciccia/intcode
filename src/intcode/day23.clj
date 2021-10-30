@@ -27,10 +27,16 @@
   (DefaultBuffer. (LinkedList.) n default-value))
 
 (defn non-blocking-chan
+  "Uses the above buffer such that any attempts to pull off this channel
+  when empty will receive default-value instead of blocking, otherwise works like normal"
   [default-value]
   (async/chan (default-buffer 1024 default-value)))
 
 (defn nat-sniff!
+  "if nat is in use, this is the 'timeout' loop that polls te nat-sniff-chan,
+   which is a channel that detects any network activity.
+   If none has happened for 100ms, which seems to be long enough for purposes of this project,
+   sends the last packet it received on node 255 got to node 0"
   [system nat-sniff-chan]
   (async/go-loop [last-sent-idle-y nil]
     (let [[_val chan] (async/alts! [nat-sniff-chan (async/timeout 100)])]
@@ -49,6 +55,9 @@
           (recur last-sent-idle-y))))))
 
 (defn system!
+  "Sets up maps of nodes to their input output channels,
+  then links up senders to receivers, and then starts processing packets.
+  If nat is in play, also alerts it to when the network is not idle"
   [program nat?]
   (let [system (-> (reduce
                      (fn [acc i]
