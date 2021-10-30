@@ -17,7 +17,7 @@
   [tape ptr]
   (let [val (get tape ptr)]
     (if (nil? val)
-      (throw (Exception. "Instruction pointer out of range."))
+      (throw (Exception. (str "Instruction pointer out of range." tape ptr)))
       val)))
 
 (defn- get-data
@@ -70,6 +70,7 @@
   (async/go-loop [tape (->> instructions (map-indexed vector) (into {}))
                   ptr 0
                   relative-base 0]
+    (async/<! (async/timeout 1))
     (let [instruction (read-tape tape ptr)
           [opcode param-modes] ((juxt first rest) (instruction->opcode-and-param-modes instruction))
           take-params* (partial take-params tape ptr relative-base param-modes)
