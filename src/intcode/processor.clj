@@ -66,62 +66,65 @@
                        (get-param-value tape relative-base %2 (+ ptr 1 %1))))))
 
 (defn run
-  [instructions in-chan out-chan]
-  (async/go-loop [tape (->> instructions (map-indexed vector) (into {}))
-                  ptr 0
-                  relative-base 0]
-    (async/<! (async/timeout 1))
-    (let [instruction (read-tape tape ptr)
-          [opcode param-modes] ((juxt first rest) (instruction->opcode-and-param-modes instruction))
-          take-params* (partial take-params tape ptr relative-base param-modes)
-          assoc-value* (partial assoc-value tape)
-          [next-tape next-ptr next-relative-base]
-          (case opcode
-            1 (let [[a b write-addr] (take-params* 3 true)]
-                [(assoc-value* write-addr (+ a b))
-                 (+ ptr 4)
-                 relative-base])
-            2 (let [[a b write-addr] (take-params* 3 true)]
-                [(assoc-value* write-addr (* a b))
-                 (+ ptr 4)
-                 relative-base])
-            3 (let [[write-addr] (take-params* 1 true)
-                    value (async/<! in-chan)]
-                [(assoc-value* write-addr value)
-                 (+ ptr 2)
-                 relative-base])
-            4 (let [[value] (take-params* 1 false)]
-                (async/put! out-chan value)
-                [tape
-                 (+ ptr 2)
-                 relative-base])
-            5 (let [[test new-ptr] (take-params* 2 false)]
-                [tape
-                 (if (not (zero? test))
-                   new-ptr
-                   (+ ptr 3))
-                 relative-base])
-            6 (let [[test new-ptr] (take-params* 2 false)]
-                [tape
-                 (if (zero? test)
-                   new-ptr
-                   (+ ptr 3))
-                 relative-base])
-            7 (let [[a b write-addr] (take-params* 3 true)]
-                [(assoc-value* write-addr (if (< a b) 1 0))
-                 (+ ptr 4)
-                 relative-base])
-            8 (let [[a b write-addr] (take-params* 3 true)]
-                [(assoc-value* write-addr (if (= a b) 1 0))
-                 (+ ptr 4)
-                 relative-base])
-            9 (let [[a] (take-params* 1 false)]
-                [tape
-                 (+ ptr 2)
-                 (+ relative-base a)])
-            99 nil)]
-      (when (some? next-tape)
-        (recur next-tape next-ptr next-relative-base)))))
+  ([instructions in-chan out-chan]
+   (run instructions in-chan out-chan nil))
+  ([instructions in-chan out-chan low-priority-input-value]
+   (async/go-loop [tape (->> instructions (map-indexed vector) (into {}))
+                   ptr 0
+                   relative-base 0]
+     (let [instruction (read-tape tape ptr)
+           [opcode param-modes] ((juxt first rest) (instruction->opcode-and-param-modes instruction))
+           take-params* (partial take-params tape ptr relative-base param-modes)
+           assoc-value* (partial assoc-value tape)
+           [next-tape next-ptr next-relative-base]
+           (case opcode
+             1 (let [[a b write-addr] (take-params* 3 true)]
+                 [(assoc-value* write-addr (+ a b))
+                  (+ ptr 4)
+                  relative-base])
+             2 (let [[a b write-addr] (take-params* 3 true)]
+                 [(assoc-value* write-addr (* a b))
+                  (+ ptr 4)
+                  relative-base])
+             3 (let [[write-addr] (take-params* 1 true)
+                     value (async/<! in-chan)
+                     _ (when (= low-priority-input-value value)
+                         (async/<! (async/timeout 10)))]
+                 [(assoc-value* write-addr value)
+                  (+ ptr 2)
+                  relative-base])
+             4 (let [[value] (take-params* 1 false)]
+                 (async/put! out-chan value)
+                 [tape
+                  (+ ptr 2)
+                  relative-base])
+             5 (let [[test new-ptr] (take-params* 2 false)]
+                 [tape
+                  (if (not (zero? test))
+                    new-ptr
+                    (+ ptr 3))
+                  relative-base])
+             6 (let [[test new-ptr] (take-params* 2 false)]
+                 [tape
+                  (if (zero? test)
+                    new-ptr
+                    (+ ptr 3))
+                  relative-base])
+             7 (let [[a b write-addr] (take-params* 3 true)]
+                 [(assoc-value* write-addr (if (< a b) 1 0))
+                  (+ ptr 4)
+                  relative-base])
+             8 (let [[a b write-addr] (take-params* 3 true)]
+                 [(assoc-value* write-addr (if (= a b) 1 0))
+                  (+ ptr 4)
+                  relative-base])
+             9 (let [[a] (take-params* 1 false)]
+                 [tape
+                  (+ ptr 2)
+                  (+ relative-base a)])
+             99 nil)]
+       (when (some? next-tape)
+         (recur next-tape next-ptr next-relative-base))))))
 
 (comment
   "Day 7 Part 2 example w/ my puzzle input"

@@ -27,13 +27,13 @@
   (DefaultBuffer. (LinkedList.) n default-value))
 
 (defn non-blocking-chan
-  []
-  (async/chan (default-buffer 1024 -1)))
+  [default-value]
+  (async/chan (default-buffer 1024 default-value)))
 
 (defn nat-sniff!
   [system nat-sniff-chan]
   (async/go-loop [last-sent-idle-y nil]
-    (let [[_val chan] (async/alts! [nat-sniff-chan (async/timeout 5000)])]
+    (let [[_val chan] (async/alts! [nat-sniff-chan (async/timeout 100)])]
       (if (not= chan nat-sniff-chan)
         (let [idle-x (async/<! (get-in system [255 :stdin]))
               idle-y (async/<! (get-in system [255 :stdin]))]
@@ -52,7 +52,7 @@
   [program nat?]
   (let [system (-> (reduce
                      (fn [acc i]
-                       (assoc acc i {:stdin  (non-blocking-chan)
+                       (assoc acc i {:stdin  (non-blocking-chan -1)
                                      :stdout (async/chan)}))
                      {}
                      (range 50))
@@ -76,7 +76,7 @@
               (async/put! nat-sniff-chan y))
             (when (some? y)
               (recur))))
-        (intcode/run program stdin stdout)))
+        (intcode/run program stdin stdout -1)))
     system))
 
 (defn part1
