@@ -7,10 +7,9 @@
            (java.util LinkedList)))
 
 (deftype DefaultBuffer [^LinkedList buf ^long n default-value]
-  impl/UnblockingBuffer
   impl/Buffer
   (full? [_this]
-    false)
+    (>= (.size buf) n))
   (remove! [_this]
     (if-not (zero? (.size buf))
       (.removeLast buf)
