@@ -31,6 +31,24 @@
   []
   (async/chan (default-buffer 1024 -1)))
 
+(defn nat-sniff!
+  [system nat-sniff-chan]
+  (async/go-loop [last-sent-idle-y nil]
+    (let [[_val chan] (async/alts! [nat-sniff-chan (async/timeout 5000)])]
+      (if (not= chan nat-sniff-chan)
+        (let [idle-x (async/<! (get-in system [255 :stdin]))
+              idle-y (async/<! (get-in system [255 :stdin]))]
+          (if (= idle-y last-sent-idle-y)
+            (do (println "It's this: " idle-y)
+                (async/put! (get-in system [255 :stdout]) idle-y))
+            (do (println "Sending idle packet to 0:" [idle-x idle-y])
+                (async/put! (get-in system [0 :stdin]) idle-x)
+                (async/put! (get-in system [0 :stdin]) idle-y)
+                (recur idle-y))))
+        (do
+          (println "Got this: " _val)
+          (recur last-sent-idle-y))))))
+
 (defn system!
   [program nat?]
   (let [system (-> (reduce
@@ -42,22 +60,7 @@
                    (assoc 255 {:stdin  (async/chan (async/sliding-buffer 2))
                                :stdout (async/chan)}))
         nat-sniff-chan (when nat? (async/chan))]
-    (when nat-sniff-chan
-      (async/go-loop [last-sent-idle-y nil]
-        (let [[_val chan] (async/alts! [nat-sniff-chan (async/timeout 5000)])]
-          (if (not= chan nat-sniff-chan)
-            (let [idle-x (async/<! (get-in system [255 :stdin]))
-                  idle-y (async/<! (get-in system [255 :stdin]))]
-              (if (= idle-y last-sent-idle-y)
-                (do (println "It's this: " idle-y)
-                    (async/put! (get-in system [255 :stdout]) idle-y))
-                (do (println "Sending idle packet to 0:" [idle-x idle-y])
-                    (async/put! (get-in system [0 :stdin]) idle-x)
-                    (async/put! (get-in system [0 :stdin]) idle-y)
-                    (recur idle-y))))
-            (do
-              (println "Got this: " _val)
-              (recur last-sent-idle-y))))))
+    (when nat-sniff-chan (nat-sniff! system nat-sniff-chan))
     (doseq [[i {:keys [stdin stdout]}] system]
       (when (< i 255)
         (async/put! stdin i)
